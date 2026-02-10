@@ -1,0 +1,68 @@
+name: Daily News Curation
+
+on:
+  schedule:
+    # UTC 22:00 = JST 07:00
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: '取得する記事の時間範囲（時間単位）'
+        required: false
+        default: '48'
+
+jobs:
+  curate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch articles
+        id: fetch
+        env:
+          NYT_API_KEY: ${{ secrets.NYT_API_KEY }}
+        run: |
+          python fetch_articles.py --hours ${{ github.event.inputs.hours || '48' }}
+        continue-on-error: true
+
+      - name: Select articles with Claude
+        id: select
+        if: steps.fetch.outcome == 'success'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python select_articles.py
+        continue-on-error: true
+
+      - name: Post to Slack
+        if: steps.select.outcome == 'success'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python post_to_slack.py
+
+      - name: Post error to Slack (fetch failed)
+        if: steps.fetch.outcome == 'failure'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python post_to_slack.py --error "記事の取得に失敗しました。NYT_API_KEY を確認してください。"
+
+      - name: Post error to Slack (select failed)
+        if: steps.fetch.outcome == 'success' && steps.select.outcome == 'failure'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python post_to_slack.py --error "Claude API での記事選定に失敗しました。ANTHROPIC_API_KEY を確認してください。"
