@@ -22,7 +22,7 @@ DEFAULT_OUTPUT_PATH = "/tmp/selected.md"
 DEFAULT_PROMPT_PATH = Path(__file__).parent / "prompt.txt"
 
 # Claude モデル
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
 
 
